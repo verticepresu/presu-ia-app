@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1722">
+  <meta name="robots" content="noindex">
+  <title>PRESU-IA · Presupuestos con IA</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f1722'/%3E%3Cpath d='M16 18h10l6 20 6-20h10L37 48H27z' fill='%23f2b705'/%3E%3C/svg%3E">
+  <!--
+    Página de entrada de Vértice · PRESU-IA.
+    Muestra la aplicación de Apps Script dentro de un marco "sin credenciales": el navegador no
+    usa ahí las cuentas de Google abiertas, así que no aparece el error de Google
+    "No se puede abrir el archivo en estos momentos" cuando hay varias cuentas.
+    La aplicación guarda aquí su sesión (en este navegador y solo en esta pestaña) para que
+    recargar la página no obligue a entrar de nuevo.
+    Si cambia la dirección de la aplicación (nueva implementación), cambia URL_APP.
+  -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #f3f4f6; }
+    #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #f3f4f6; }
+    #carga { position: fixed; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+             background: #0f1722; color: #fff; font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; transition: opacity .3s; }
+    #carga.fuera { opacity: 0; pointer-events: none; }
+    #carga::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: #f2b705; }
+    .marca { font-size: clamp(40px, 10vw, 64px); font-weight: 900; letter-spacing: -.02em; line-height: 1; }
+    .barra { width: 140px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+    .barra::after { content: ''; display: block; width: 40%; height: 100%; background: #f2b705; border-radius: 3px; animation: va 1.1s ease-in-out infinite; }
+    @keyframes va { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+    .ayuda { position: absolute; bottom: 32px; left: 20px; right: 20px; text-align: center; font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+             color: #aeb8c5; opacity: 0; transition: opacity .4s; }
+    .ayuda.ver { opacity: 1; }
+    .ayuda a { color: #fff; font-weight: 600; }
+    @media (prefers-reduced-motion: reduce) { .barra::after { animation: none; width: 100%; } }
+  </style>
+</head>
+<body>
+  <div id="carga" role="status" aria-live="polite">
+    <div class="marca">PRESU-IA</div>
+    <div class="barra" aria-hidden="true"></div>
+    <p class="ayuda" id="ayuda">¿Tarda demasiado? <a id="directo" href="#">Abrir directamente</a></p>
+  </div>
+  <iframe id="app" credentialless title="PRESU-IA" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+
+  <script>
+  (function () {
+    'use strict';
+    var URL_APP = 'https://script.google.com/macros/s/AKfycbxcf-I_j_1tBkIRrEtfp_pHIuYiGKVfvfglPtv61sL8-UCNG5WwOVeCRoNndMrBSIIX/exec';
+    // Lo que la aplicación puede guardar aquí, y dónde
+    var CLAVES = { presu_token: sessionStorage, presu_usuario: sessionStorage, presu_ia: localStorage };
+
+    // Pasa el ?empresa=… (logo y color de cada cliente) a la aplicación
+    var empresa = new URLSearchParams(location.search).get('empresa');
+    var src = URL_APP + (empresa ? '?empresa=' + encodeURIComponent(empresa) : '');
+    var marco = document.getElementById('app');
+    document.getElementById('directo').href = src;
+    marco.src = src;
+
+    var carga = document.getElementById('carga');
+    marco.addEventListener('load', function () { setTimeout(function () { carga.classList.add('fuera'); }, 250); });
+    setTimeout(function () { document.getElementById('ayuda').classList.add('ver'); }, 12000);
+
+    // ¿El mensaje viene de la aplicación que está dentro de nuestro marco?
+    function esDeLaApp(ev) {
+      if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return false;
+      var w = ev.source;
+      for (var i = 0; w && i < 6; i++) {
+        if (w === marco.contentWindow) return true;
+        if (w === w.parent) break;
+        w = w.parent;
+      }
+      return false;
+    }
+    function leer(k) { try { return CLAVES[k].getItem(k); } catch (e) { return null; } }
+
+    window.addEventListener('message', function (ev) {
+      var d = ev.data;
+      if (!d || typeof d !== 'object' || typeof d.presu !== 'string' || !esDeLaApp(ev)) return;
+      if (d.presu === 'pedir') {
+        var datos = {};
+        Object.keys(CLAVES).forEach(function (k) { datos[k] = leer(k); });
+        ev.source.postMessage({ presu: 'datos', datos: datos }, ev.origin);
+      } else if (d.presu === 'guardar' && Object.prototype.hasOwnProperty.call(CLAVES, d.clave)) {
+        try {
+          if (d.valor == null) CLAVES[d.clave].removeItem(d.clave);
+          else CLAVES[d.clave].setItem(d.clave, String(d.valor).slice(0, 4000));
+        } catch (e) {}
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
